@@ -13,15 +13,16 @@ contract UntrustedEscrow is ReentrancyGuard {
     struct Escrow {
         address tokenAddress;
         address seller;
+        address buyer;
         uint256 amount;
         uint256 releaseTime;
     }
 
-    mapping(uint256 => Escrow) public escrows;
-    uint256 public nextEscrowId;
+    mapping(uint256 => Escrow) public s_escrows;
+    uint256 public s_nextEscrowId;
 
     /// @notice Creates an escrow agreement for token transactions.
-    /// @dev Increments the `nextEscrowId` for each new escrow and sets a release time.
+    /// @dev Increments the `s_nextEscrowId` for each new escrow and sets a release time.
     /// @param _tokenAddress The ERC20 token address involved in the escrow.
     /// @param _seller The address of the seller in the escrow agreement.
     /// @param _amount The amount of tokens to be held in escrow.
@@ -33,17 +34,16 @@ contract UntrustedEscrow is ReentrancyGuard {
     {
         require(_amount > 0, "Amount must be greater than 0");
 
-        IERC20 token = IERC20(_tokenAddress);
-        require(token.transferFrom(msg.sender, address(this), _amount), "Transfer failed");
-
-        uint256 escrowId = ++nextEscrowId;
-        nextEscrowId = escrowId;
-        escrows[escrowId] = Escrow({
+        uint256 escrowId = ++s_nextEscrowId;
+        s_nextEscrowId = escrowId;
+        s_escrows[escrowId] = Escrow({
             tokenAddress: _tokenAddress,
             seller: _seller,
+            buyer: msg.sender,
             amount: _amount,
             releaseTime: block.timestamp + 3 days
         });
+        IERC20(_tokenAddress).safeTransferFrom(msg.sender, address(this), _amount);
 
         return escrowId;
     }
@@ -52,21 +52,23 @@ contract UntrustedEscrow is ReentrancyGuard {
     /// @dev Transfers the token amount to the seller and deletes the escrow.
     /// @param _escrowId The ID of the escrow to withdraw from.
     function withdraw(uint256 _escrowId) external nonReentrant {
-        Escrow storage escrow = escrows[_escrowId];
+        Escrow storage escrow = s_escrows[_escrowId];
 
         require(msg.sender == escrow.seller, "Only seller can withdraw");
         require(block.timestamp >= escrow.releaseTime, "Too early to withdraw");
 
-        require(IERC20(escrow.tokenAddress).transfer(msg.sender, escrow.amount), "Transfer failed");
-
-        delete escrows[_escrowId];
+        delete s_escrows[_escrowId];
+        IERC20(escrow.tokenAddress).safeTransfer(msg.sender, escrow.amount);
     }
 
     /// @notice Allows the seller to cancel the escrow agreement.
     /// @dev Deletes the escrow from the mapping.
     /// @param _escrowId The ID of the escrow to cancel.
     function cancelEscrow(uint256 _escrowId) external {
-        require(msg.sender == escrows[_escrowId].seller, "only seller can cancel escrow");
-        delete escrows[_escrowId];
+        Escrow storage escrow = s_escrows[_escrowId];
+        require(msg.sender == escrow.seller, "only seller can cancel escrow");
+
+        delete s_escrows[_escrowId];
+        IERC20(escrow.tokenAddress).safeTransfer(escrow.buyer, escrow.amount);
     }
 }
