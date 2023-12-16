@@ -9,12 +9,12 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 contract GodToken is ERC20 {
     error IsNotGod(); // Custom error for unauthorized access
 
-    address private s_god; // Address of the 'god' or owner of the contract
+    address immutable i_god; // Address of the 'god' or owner of the contract
 
     /// @notice Contract constructor that initializes the ERC20 token with a name and symbol.
     /// @dev Sets the `s_god` variable to the address that deploys the contract.
     constructor() ERC20("GodToken", "GOD") {
-        s_god = msg.sender;
+        i_god = msg.sender;
     }
 
     /// @notice Allows only the god (contract creator) to transfer tokens from any address to any address.
@@ -24,7 +24,7 @@ contract GodToken is ERC20 {
     /// @param amount The amount of tokens to transfer.
     /// @custom:error IsNotGod Thrown if the caller is not the god (contract creator).
     function godTransfer(address from, address to, uint256 amount) public {
-        if (msg.sender != s_god) {
+        if (msg.sender != i_god) {
             revert IsNotGod();
         }
         _transfer(from, to, amount);
